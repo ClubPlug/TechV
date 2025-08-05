@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eBay TopSellers</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+
+    header {
+      background: #e53238;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+      animation: fadeInDown 0.8s ease-out;
+    }
+
+    nav a {
+      margin: 0 15px;
+      text-decoration: none;
+      color: #fff;
+      font-weight: bold;
+      transition: color 0.3s;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+      color: #ffd700;
+    }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 20px;
+      animation: fadeIn 1s ease-in;
+    }
+
+    .sidebar {
+      width: 300px;
+      padding: 10px;
+      background: #fff;
+      border-right: 1px solid #ddd;
+    }
+
+    .content {
+      flex: 1;
+      padding: 10px;
+    }
+
+    .filters {
+      background: #fff;
+      padding: 15px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+
+    .filters select,
+    .filters input[type="range"] {
+      margin-right: 10px;
+      padding: 5px;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 15px;
+    }
+
+    .product-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .product-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+    }
+
+    .product-card img {
+      max-width: 100%;
+      height: auto;
+      transition: transform 0.3s;
+    }
+
+    .product-card img:hover {
+      transform: scale(1.05);
+    }
+
+    .product-card h4 {
+      color: #0073e6;
+    }
+
+    .product-card a {
+      text-decoration: none;
+      color: #e53238;
+      font-weight: bold;
+      transition: color 0.3s;
+    }
+
+    .product-card a:hover {
+      text-decoration: underline;
+      color: #0073e6;
+    }
+
+    .adsense {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      text-align: center;
+      margin: 20px 0;
+      color: #888;
+      background: #fafafa;
+      transition: background 0.3s ease;
+    }
+
+    .adsense:hover {
+      background: #f0f0f0;
+    }
+
+    footer {
+      background: #333;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      font-size: 0.9em;
+      animation: fadeInUp 0.8s ease-out;
+    }
+
+    footer a {
+      color: #e53238;
+      text-decoration: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>eBay TopSellers</h1>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#">Categories</a>
+      <a href="#">About</a>
+      <a href="#">Contact</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <h3>Trending Categories</h3>
+      <ul>
+        <li>Electronics</li>
+        <li>Fashion</li>
+        <li>Home & Garden</li>
+      </ul>
+      <div class="adsense">AdSense Ad #1 (300x250)</div>
+    </aside>
+
+    <main class="content">
+      <div class="filters">
+        <select>
+          <option>Day</option>
+          <option>Week</option>
+          <option>Month</option>
+          <option>Year</option>
+        </select>
+        <select>
+          <option>All Categories</option>
+          <option>Electronics</option>
+          <option>Fashion</option>
+        </select>
+        <input type="range" min="0" max="1000" />
+        <label><input type="checkbox" /> New</label>
+        <label><input type="checkbox" /> Used</label>
+      </div>
+
+      <div class="product-grid">
+        <div class="product-card">
+          <img src="https://via.placeholder.com/150" alt="Product" />
+          <h4>Product Name</h4>
+          <p>$49.99</p>
+          <a href="#">Buy on eBay</a>
+        </div>
+        <div class="product-card">
+          <img src="https://via.placeholder.com/150" alt="Product" />
+          <h4>Product Name</h4>
+          <p>$29.99</p>
+          <a href="#">Buy on eBay</a>
+        </div>
+        <div class="adsense">AdSense Ad #2 (In-Feed)</div>
+        <div class="product-card">
+          <img src="https://via.placeholder.com/150" alt="Product" />
+          <h4>Product Name</h4>
+          <p>$59.99</p>
+          <a href="#">Buy on eBay</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <footer>
+    <div class="adsense">AdSense Ad #3 (728x90)</div>
+    <p>Disclaimer: This site is not affiliated with eBay. All trademarks are property of their respective owners.</p>
+    <p>&copy; 2025 Ebay TopSellers. All rights reserved.</p>
+  </footer>
+</body>
+</html>
