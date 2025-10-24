@@ -218,13 +218,25 @@ def generate():
             download_name=output_filename
         )
 
-    except Exception as e:
-        print(f"An unexpected error occurred during PDF generation: {e}", file=sys.stderr)
-        # Fallback to the form with an error message
-        default_params = request.form.to_dict()
-        error_msg = f"Generation failed due to a server error. Please check your themes. Error: {e}"
-        return render_template_string(HTML_TEMPLATE, default_params=default_params, error_message=error_msg), 500
+# app.py - Find the /generate route's 'except' block (around line 100)
 
+    except Exception as e:
+        import traceback # <-- ADD THIS IMPORT
+        
+        # --- REPLACE THE NEXT TWO LINES WITH THIS BLOCK ---
+        # Capture the full traceback and print it to standard error (which Render logs)
+        error_trace = traceback.format_exc()
+        print("--- FULL PDF GENERATION TRACEBACK START ---", file=sys.stderr)
+        print(error_trace, file=sys.stderr)
+        print("--- FULL PDF GENERATION TRACEBACK END ---", file=sys.stderr)
+        
+        # This is what the user sees in the browser
+        error_msg = f"Generation failed due to a server error. Please check your themes. Error: {type(e).__name__}: {e}"
+        # If possible, show a more descriptive error from the traceback
+        # We limit the error shown to the user but log the full detail
+        
+        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 400
+        
 if __name__ == '__main__':
     # When running locally, you can change the port if 5000 is used
     app.run(debug=True, port=5000)
