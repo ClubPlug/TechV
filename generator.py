@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import letter, A4, legal
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.colors import lightgrey
-from reportlab.lib import colors # <-- Added this import to ensure colors.black is available
+from reportlab.lib import colors 
 
 # --- KDP Large Print Configuration ---
 PAGE_SIZE_MAP = {
@@ -141,20 +141,23 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     char_width = pdf.stringWidth("A", GRID_FONT, GRID_FONT_SIZE)
     space_width = pdf.stringWidth(" ", GRID_FONT, GRID_FONT_SIZE)
     
-    # Calculate total line width: N characters + (N-1) spaces
+    # The width of one cell in the puzzle grid (character + space)
+    cell_width = char_width + space_width 
+    
+    # Total drawn width of the grid (N characters + (N-1) spaces)
     line_width = (puzzle.size * char_width) + ((puzzle.size - 1) * space_width) 
     
-    # Calculate vertical spacing
-    line_height = GRID_FONT_SIZE + 2 # Add a couple of points for spacing
+    # Vertical spacing
+    line_height = GRID_FONT_SIZE + 2 
     grid_height = puzzle.size * line_height
 
+    # Calculate X and Y coordinates for the grid's top-left corner
     x0 = (page_w - line_width) / 2
     y0 = page_h - PUZZLE_TOP_OFFSET - grid_height
 
     # --- Draw Border ---
     pdf.setStrokeColorRGB(0, 0, 0)
     pdf.setLineWidth(1)
-    # The rect needs to encompass the whole grid plus the padding
     pdf.rect(x0 - BORDER_PADDING, y0 - BORDER_PADDING, 
              line_width + 2 * BORDER_PADDING, grid_height + 2 * BORDER_PADDING)
 
@@ -163,71 +166,54 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     if highlight:
         for word, info in puzzle.key.items():
             try:
-                sr, sc = info['start'] # Start row, start column
-                d_row, d_col = info['direction'].value # Direction changes (row_change, col_change)
+                sr, sc = info['start']
+                d_row, d_col = info['direction'].value
             except AttributeError as e:
                 print(f"⚠️ Failed to unpack word key info for word: {word}. Error: {e}", file=sys.stderr)
                 continue
 
             for i in range(len(word)):
                 highlight_pos.add((sr + i * d_row, sc + i * d_col))
+    # --- End Calculate Highlight Positions ---
 
-    # --- Draw Grid Content ---
-    y = y0 + grid_height - (line_height / 2) # Start Y for the first line of text baseline
+    # --- Draw Grid Content and Highlights ---
+    
+    # Start Y for the first line of text baseline
+    y_baseline = y0 + grid_height - (line_height / 2) 
     
     for r in range(puzzle.size):
-        # Calculate X position for drawing characters individually (needed for highlight)
-        current_x = x0
+        # Draw the entire line of text first
+        line = " ".join(puzzle.puzzle[r])
+        pdf.drawString(x0, y_baseline, line)
         
-        for c in range(puzzle.size):
-            cell_text = puzzle.puzzle[r][c]
-            
-            # 1. Highlighting (Draw Rectangles First)
-            if (r, c) in highlight_pos:
-                
-                # --- FIX: Calculate Highlight Position and Size ---
-                # To align the highlight with the puzzle, we need to know the x-position 
-                # of the *start* of the current character's drawing area.
-                
-                # Calculate the start X position for the highlight rectangle.
-                # The text is drawn with a space *between* letters.
-                # For column c=0, the character starts at x0.
-                # For column c > 0, the text starts after c characters and c spaces.
-                # The space is split into (space_width / 2) before the character and after.
-                
-                # The total space before the current character is:
-                # 1. The cumulative width of previous characters: c * char_width
-                # 2. The cumulative width of spaces between them: c * space_width
-                
-                # To get the left edge of the highlight box:
-                # Start at x0, and move past c previous full cell widths (char+space)
-                # But since we use drawString, the character is placed at the baseline.
-                # The effective start of the block for character 'c' is:
-                
-                # This ensures the highlight block is centered on the character cell.
-                # The start of the highlight should be half a space before the character baseline start (current_x)
-                rect_x = current_x - (space_width / 2) 
-                
-                # Rect y starts at the bottom of the line area.
-                rect_y = y - line_height 
-                
-                # Rect width covers the character and the trailing space.
-                # This is the full cell width.
-                rect_width = char_width + space_width 
-                
-                pdf.setFillColor(lightgrey)
-                pdf.rect(rect_x, rect_y, rect_width, line_height, fill=1, stroke=0)
-                pdf.setFillColor(colors.black) # Reset fill color for text
-                        
-            # 2. Drawing Character
-            pdf.drawString(current_x, y, cell_text)
-            
-            # Advance X position for the next character (char + space)
-            # This is the new baseline start for the next character (c+1).
-            current_x += char_width + space_width
-            
+        # Now, if highlighting is enabled, draw the highlight rectangles over the relevant characters
+        if highlight:
+            for c in range(puzzle.size):
+                if (r, c) in highlight_pos:
+                    
+                    # 1. Calculate the starting X for the highlight block.
+                    # This must be the cumulative width of (char + space) for all preceding columns (c).
+                    # Since the line starts at x0, the highlight must start at:
+                    # x0 + (c * (char_width + space_width)) - (space_width / 2)
+                    
+                    # Calculate the position of the character's baseline start
+                    current_x = x0 + (c * cell_width) 
+
+                    # Corrected rect_x: start half a space before the character's drawn position
+                    rect_x = current_x - (space_width / 2) 
+                    
+                    # Rect y starts at the bottom of the line area.
+                    rect_y = y_baseline - line_height 
+                    
+                    # Rect width covers the character and the trailing space.
+                    rect_width = cell_width 
+                    
+                    pdf.setFillColor(lightgrey)
+                    pdf.rect(rect_x, rect_y, rect_width, line_height, fill=1, stroke=0)
+                    pdf.setFillColor(colors.black) # Reset fill color for text
+        
         # Advance Y position for the next line
-        y -= line_height
+        y_baseline -= line_height
         
     return y0
 
