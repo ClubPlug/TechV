@@ -1,1 +1,5 @@
-Flaskreportlabword-search-generatorrequestsgunicorn
+Flask
+reportlab
+word-search-generator
+requests
+gunicorn
