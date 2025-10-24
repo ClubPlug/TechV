@@ -4,6 +4,7 @@ import string
 from flask import Flask, request, render_template_string, send_file, redirect, url_for
 import sys
 import time
+import traceback # Added for better error logging
 from reportlab.lib.units import inch
 
 # Import the generation function from the external script
@@ -64,7 +65,6 @@ HTML_TEMPLATE = """
         <div class="card bg-white p-6 sm:p-8 rounded-xl border border-gray-200">
             <form method="POST" action="{{ url_for('generate') }}" class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                <!-- Themes -->
                 <div class="md:col-span-2">
                     <label for="themes" class="block text-sm font-medium text-gray-700">Themes (Comma Separated)</label>
                     <input type="text" name="themes" id="themes" required
@@ -74,7 +74,6 @@ HTML_TEMPLATE = """
                     <p class="mt-1 text-xs text-gray-500">The script will fetch related words for these themes online.</p>
                 </div>
 
-                <!-- Word Count -->
                 <div>
                     <label for="word_count" class="block text-sm font-medium text-gray-700">Total Words to Collect</label>
                     <input type="number" name="word_count" id="word_count" required
@@ -83,7 +82,6 @@ HTML_TEMPLATE = """
                     <p class="mt-1 text-xs text-gray-500">Total number of words to be distributed across all puzzles.</p>
                 </div>
 
-                <!-- Puzzle Size (Width/Height) -->
                 <div>
                     <label for="size" class="block text-sm font-medium text-gray-700">Puzzle Grid Size (N x N)</label>
                     <input type="number" name="size" id="size" required
@@ -92,7 +90,6 @@ HTML_TEMPLATE = """
                     <p class="mt-1 text-xs text-gray-500">The grid will be N x N (e.g., 15 for 15x15).</p>
                 </div>
                 
-                <!-- Page Size -->
                 <div>
                     <label for="page_size" class="block text-sm font-medium text-gray-700">PDF Page Size</label>
                     <select name="page_size" id="page_size" required
@@ -104,7 +101,6 @@ HTML_TEMPLATE = """
                     <p class="mt-1 text-xs text-gray-500">Physical paper size of the output PDF.</p>
                 </div>
 
-                <!-- Submission Button -->
                 <div class="md:col-span-2 mt-4">
                     <button type="submit" {% if generator_missing %}disabled{% endif %}
                         class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-lg text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out transform hover:scale-105 {% if generator_missing %}opacity-50 cursor-not-allowed{% endif %}">
@@ -172,8 +168,10 @@ def generate():
         error_msg = f"Application initialization failed. Please check 'generator.py' in the logs. Error: {globals().get('GENERATOR_IMPORT_ERROR', 'Unknown load failure.')}"
         return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 500
 
-    # 1. Parse and Validate Parameters
+    final_pdf_path = "" # Initialize here for cleanup in the final except block
+
     try:
+        # 1. Parse and Validate Parameters
         themes = request.form.get('themes', 'random').strip()
         word_count = int(request.form.get('word_count', 100))
         size = int(request.form.get('size', 15))
@@ -186,20 +184,14 @@ def generate():
         if not (20 <= word_count <= 2000):
             raise ValueError("Word count must be between 20 and 2000.")
 
-    except ValueError as e:
-        # Re-render the form with user's inputs and an error message
-        default_params = request.form.to_dict()
-        return render_template_string(HTML_TEMPLATE, default_params=default_params, error_message=str(e)), 400
-
-    # 2. Generate Unique Filename and Output Path
-    session_id = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-    # Sanitize themes for filename
-    safe_theme = "".join(c for c in themes.split(',')[0].strip() if c.isalnum()).lower()
-    output_filename = f"word_search_collection_{safe_theme or 'puzzles'}_{session_id}.pdf"
-    output_path = os.path.join(TEMP_DIR, output_filename)
-    
-    # 3. Execute the Python Puzzle Script
-    try:
+        # 2. Generate Unique Filename and Output Path
+        session_id = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        # Sanitize themes for filename
+        safe_theme = "".join(c for c in themes.split(',')[0].strip() if c.isalnum()).lower()
+        output_filename = f"word_search_collection_{safe_theme or 'puzzles'}_{session_id}.pdf"
+        output_path = os.path.join(TEMP_DIR, output_filename)
+        
+        # 3. Execute the Python Puzzle Script
         # The core call to your generator script
         final_pdf_path = generate_word_search_pdf(
             width=size,
@@ -209,8 +201,21 @@ def generate():
             page_size_str=page_size_str,
             output_path=output_path
         )
+        
+        # CRITICAL FIX: Schedule the temporary file deletion using @app.after_this_request
+        # This function is guaranteed to run AFTER the response has been sent to the client.
+        @app.after_this_request
+        def cleanup(response):
+            if os.path.exists(final_pdf_path):
+                try:
+                    os.remove(final_pdf_path)
+                    print(f"✅ Cleaned up temp file: {final_pdf_path}", file=sys.stderr)
+                except Exception as cleanup_e:
+                    print(f"⚠️ Error cleaning up temp file {final_pdf_path}: {cleanup_e}", file=sys.stderr)
+            return response
 
         # 4. Serve the File to the User
+        # Returning this response stops the spinner and initiates the download
         return send_file(
             final_pdf_path, 
             mimetype='application/pdf', 
@@ -218,24 +223,31 @@ def generate():
             download_name=output_filename
         )
 
-# app.py - Find the /generate route's 'except' block (around line 100)
+    except ValueError as e:
+        # Re-render the form with user's inputs and an error message
+        default_params = request.form.to_dict()
+        return render_template_string(HTML_TEMPLATE, default_params=default_params, error_message=str(e)), 400
 
     except Exception as e:
-        import traceback # <-- ADD THIS IMPORT
+        # General Server/Generation Errors
         
-        # --- REPLACE THE NEXT TWO LINES WITH THIS BLOCK ---
         # Capture the full traceback and print it to standard error (which Render logs)
         error_trace = traceback.format_exc()
         print("--- FULL PDF GENERATION TRACEBACK START ---", file=sys.stderr)
         print(error_trace, file=sys.stderr)
         print("--- FULL PDF GENERATION TRACEBACK END ---", file=sys.stderr)
         
+        # Try to clean up the file if it was partially created during an exception
+        if final_pdf_path and os.path.exists(final_pdf_path):
+            try:
+                os.remove(final_pdf_path)
+            except OSError:
+                pass 
+
         # This is what the user sees in the browser
         error_msg = f"Generation failed due to a server error. Please check your themes. Error: {type(e).__name__}: {e}"
-        # If possible, show a more descriptive error from the traceback
-        # We limit the error shown to the user but log the full detail
         
-        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 400
+        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 500 # Use 500 for server-side errors
         
 if __name__ == '__main__':
     # When running locally, you can change the port if 5000 is used
