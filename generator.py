@@ -137,21 +137,15 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     
     # --- Grid Sizing and Positioning ---
     
-    # Measure the width of a single character and space in the grid font
-    char_width = pdf.stringWidth("A", GRID_FONT, GRID_FONT_SIZE)
-    space_width = pdf.stringWidth(" ", GRID_FONT, GRID_FONT_SIZE)
+    # Measure the width of the full first line (required to center)
+    first_line = " ".join(puzzle.puzzle[0])
+    line_width = pdf.stringWidth(first_line, GRID_FONT, GRID_FONT_SIZE)
     
-    # The width of one cell in the puzzle grid (character + space)
-    cell_width = char_width + space_width 
-    
-    # Total drawn width of the grid (N characters + (N-1) spaces)
-    line_width = (puzzle.size * char_width) + ((puzzle.size - 1) * space_width) 
-    
-    # Vertical spacing
+    # Line height used for drawing text
     line_height = GRID_FONT_SIZE + 2 
     grid_height = puzzle.size * line_height
 
-    # Calculate X and Y coordinates for the grid's top-left corner
+    # X and Y coordinates for the grid's top-left corner
     x0 = (page_w - line_width) / 2
     y0 = page_h - PUZZLE_TOP_OFFSET - grid_height
 
@@ -161,59 +155,68 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     pdf.rect(x0 - BORDER_PADDING, y0 - BORDER_PADDING, 
              line_width + 2 * BORDER_PADDING, grid_height + 2 * BORDER_PADDING)
 
-    # --- Calculate Highlight Positions ---
+    # --- Calculate Highlight Positions (FIXED PATH TRACING) ---
     highlight_pos = set()
     if highlight:
         for word, info in puzzle.key.items():
+            # Handle potential differences in WordSearch library key structure
             try:
+                # Try accessing start as a tuple (used in generator.py context)
                 sr, sc = info['start']
+            except (KeyError, TypeError):
+                # Fallback to accessing start as an object (used in Word_Puzzle.py context)
+                sr, sc = info['start'].row, info['start'].column
+                
+            try:
+                # Direction is an Enum with a .value tuple (r_change, c_change)
                 d_row, d_col = info['direction'].value
-            except AttributeError as e:
-                print(f"⚠️ Failed to unpack word key info for word: {word}. Error: {e}", file=sys.stderr)
+            except AttributeError:
+                # Should not happen if WordSearch is used correctly, but good to handle
                 continue
 
+            # Trace the entire path of the word
             for i in range(len(word)):
                 highlight_pos.add((sr + i * d_row, sc + i * d_col))
-    # --- End Calculate Highlight Positions ---
+    # --- End Highlight Positions ---
 
-    # --- Draw Grid Content and Highlights ---
-    
-    # Start Y for the first line of text baseline
-    y_baseline = y0 + grid_height - (line_height / 2) 
+    # --- Draw Grid Content and Highlights (FIXED DRAWING LOGIC) ---
+    # y is the baseline for the current line of text
+    # y calculation from Word_Puzzle.py
+    y = y0 + grid_height - (GRID_FONT_SIZE / 2) 
     
     for r in range(puzzle.size):
-        # Draw the entire line of text first
         line = " ".join(puzzle.puzzle[r])
-        pdf.drawString(x0, y_baseline, line)
         
-        # Now, if highlighting is enabled, draw the highlight rectangles over the relevant characters
         if highlight:
             for c in range(puzzle.size):
                 if (r, c) in highlight_pos:
+                    cell_text = puzzle.puzzle[r][c]
                     
-                    # 1. Calculate the starting X for the highlight block.
-                    # This must be the cumulative width of (char + space) for all preceding columns (c).
-                    # Since the line starts at x0, the highlight must start at:
-                    # x0 + (c * (char_width + space_width)) - (space_width / 2)
+                    # 1. Calculate X Position (using the accurate text-before-measurement from Word_Puzzle.py)
+                    text_before = " ".join(puzzle.puzzle[r][:c])
                     
-                    # Calculate the position of the character's baseline start
-                    current_x = x0 + (c * cell_width) 
-
-                    # Corrected rect_x: start half a space before the character's drawn position
-                    rect_x = current_x - (space_width / 2) 
+                    # x_cell is the baseline start of the highlighted character/space block
+                    # The (" " if c > 0 else "") adds the preceding space width for all but the first character.
+                    x_cell = x0 + pdf.stringWidth(text_before + (" " if c > 0 else ""), GRID_FONT, GRID_FONT_SIZE)
                     
-                    # Rect y starts at the bottom of the line area.
-                    rect_y = y_baseline - line_height 
+                    # 2. Calculate Rect Y Position (from Word_Puzzle.py, relative to baseline y)
+                    rect_y = y - GRID_FONT_SIZE / 2 
                     
-                    # Rect width covers the character and the trailing space.
-                    rect_width = cell_width 
+                    # 3. Calculate Rect Dimensions
+                    # The width is the character's width plus the space width
+                    cell_width = pdf.stringWidth(cell_text, GRID_FONT, GRID_FONT_SIZE) + pdf.stringWidth(" ", GRID_FONT, GRID_FONT_SIZE)
+                    rect_height = GRID_FONT_SIZE + 2 # Use the established line height
                     
+                    # Draw the rectangle
                     pdf.setFillColor(lightgrey)
-                    pdf.rect(rect_x, rect_y, rect_width, line_height, fill=1, stroke=0)
-                    pdf.setFillColor(colors.black) # Reset fill color for text
+                    pdf.rect(x_cell, rect_y, cell_width, rect_height, fill=1, stroke=0)
+                    pdf.setFillColor(colors.black) 
         
-        # Advance Y position for the next line
-        y_baseline -= line_height
+        # Draw the line text (this must happen after the highlight rects are drawn)
+        pdf.drawString(x0, y, line)
+        
+        # Advance Y position
+        y -= line_height
         
     return y0
 
