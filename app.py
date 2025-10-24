@@ -1,10 +1,11 @@
 import os
 import random
 import string
-from flask import Flask, request, render_template_string, send_file, redirect, url_for
+# FIX 1: Added 'after_this_request' to the import list
+from flask import Flask, request, render_template_string, send_file, redirect, url_for, after_this_request
 import sys
 import time
-import traceback # Added for better error logging
+import traceback 
 from reportlab.lib.units import inch
 
 # Import the generation function from the external script
@@ -202,10 +203,10 @@ def generate():
             output_path=output_path
         )
         
-        # CRITICAL FIX: Schedule the temporary file deletion using @app.after_this_request
-        # This function is guaranteed to run AFTER the response has been sent to the client.
-        @app.after_this_request
+        # FIX 2: Corrected the decorator usage to use the imported function, not an app attribute.
+        @after_this_request
         def cleanup(response):
+            """Schedules the temporary file deletion after the response is sent."""
             if os.path.exists(final_pdf_path):
                 try:
                     os.remove(final_pdf_path)
@@ -247,7 +248,7 @@ def generate():
         # This is what the user sees in the browser
         error_msg = f"Generation failed due to a server error. Please check your themes. Error: {type(e).__name__}: {e}"
         
-        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 500 # Use 500 for server-side errors
+        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 500
         
 if __name__ == '__main__':
     # When running locally, you can change the port if 5000 is used
