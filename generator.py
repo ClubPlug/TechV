@@ -104,7 +104,7 @@ def split_word_list(words):
 
 def draw_wrapped_lines(pdf, text, x, y, font, size, line_h, page_w, page_h, margin_left, margin_right, margin_bottom):
     """Draws text and wraps it within the page boundaries."""
-    # This check (from previous step) prevents errors on empty strings
+    # FIX: Handle empty/whitespace input to prevent ReportLab errors
     if not text or not text.strip():
         return y 
 
@@ -178,29 +178,28 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
             if highlight:
                 
                 # --- Simple Highlight Drawing (Less accurate but visually functional) ---
-                # Calculate character position within the line
-                cell_center_x = current_x + char_width / 2
-                rect_x = current_x - (space_width / 2)
-                rect_y = y - line_height + (line_height - GRID_FONT_SIZE) / 2
-                
-                # This assumes every cell in the line has the same width (which is true for Courier)
                 cell_is_highlighted = False
+                
+                # --- FIX: Check for 'start' and 'end' keys before accessing them (Line 190 fix) ---
                 for word_info in puzzle.key.values():
-                    sr, sc = word_info['start']
-                    er, ec = word_info['end']
-                    
-                    # We only check the grid content itself, not a complex path trace.
-                    # This relies on the library's internal key structure.
-                    # The library provides the start and end indices of the word in the puzzle.
-                    if (r, c) == sr and (r, c) == sc:
-                         cell_is_highlighted = True
-                         break
-                    elif (r, c) == er and (r, c) == ec:
-                         cell_is_highlighted = True
-                         break
-                    # Complex path checking is omitted for stability.
-                    
+                    # Only process word placement information if it's complete
+                    if 'start' in word_info and 'end' in word_info:
+                        sr, sc = word_info['start']
+                        er, ec = word_info['end']
+                        
+                        # We only check the grid content itself, not a complex path trace.
+                        # This relies on the library's internal key structure.
+                        # The library provides the start and end indices of the word in the puzzle.
+                        if (r, c) == (sr, sc) or (r, c) == (er, ec):
+                            cell_is_highlighted = True
+                            break
+                        # Complex path checking is omitted for stability.
+                        
                 if cell_is_highlighted:
+                    # Calculate character position within the line
+                    rect_x = current_x - (space_width / 2)
+                    rect_y = y - line_height + (line_height - GRID_FONT_SIZE) / 2
+                    
                     pdf.setFillColor(lightgrey)
                     pdf.rect(rect_x, rect_y, char_width + space_width, line_height, fill=1, stroke=0)
                     pdf.setFillColor(colors.black)
@@ -243,10 +242,10 @@ def generate_word_search_pdf(width: int, height: int, themes: str, word_count: i
         raise Exception("Word list generation failed. Try a different theme or reduce the word count.")
 
     # --- CRITICAL FIX: AGGRESSIVE ASCII SANITIZATION ---
+    # This was added in the previous step to handle character encoding issues.
     sanitized_words = []
     for word in all_words:
         # Aggressively remove non-ASCII characters that ReportLab may choke on.
-        # This converts Unicode characters to the closest ASCII equivalent or removes them.
         cleaned_word = word.encode('ascii', 'ignore').decode('ascii').strip().upper()
         
         # Final check to ensure it's still a valid word after cleaning
