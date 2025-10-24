@@ -7,12 +7,16 @@ import time
 from reportlab.lib.units import inch
 
 # Import the generation function from the external script
+# We make the import non-fatal to allow the server to start and display the error message.
 try:
     from generator import generate_word_search_pdf
-except ImportError:
-    # Fallback/Error handling if generator.py is missing or corrupted
-    print("FATAL: Could not import generate_word_search_pdf from generator.py", file=sys.stderr)
-    sys.exit(1)
+except ImportError as e:
+    # Set a flag and store the error message if the import fails
+    generate_word_search_pdf = None
+    GENERATOR_IMPORT_ERROR = str(e)
+except Exception as e:
+    generate_word_search_pdf = None
+    GENERATOR_IMPORT_ERROR = f"An unexpected error occurred during generator load: {e}"
 
 # --- Configuration ---
 app = Flask(__name__)
@@ -47,6 +51,13 @@ HTML_TEMPLATE = """
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
             <strong class="font-bold">Error:</strong>
             <span class="block sm:inline">{{ error_message }}</span>
+        </div>
+        {% endif %}
+
+        {% if generator_missing %}
+        <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-6" role="alert">
+            <strong class="font-bold">Setup Error:</strong>
+            <span class="block sm:inline">The generator function is missing. Please ensure 'generator.py' is correctly placed and committed. Import Error: {{ generator_error }}</span>
         </div>
         {% endif %}
 
@@ -95,8 +106,8 @@ HTML_TEMPLATE = """
 
                 <!-- Submission Button -->
                 <div class="md:col-span-2 mt-4">
-                    <button type="submit"
-                        class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-lg text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out transform hover:scale-105">
+                    <button type="submit" {% if generator_missing %}disabled{% endif %}
+                        class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-lg text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out transform hover:scale-105 {% if generator_missing %}opacity-50 cursor-not-allowed{% endif %}">
                         <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" style="display:none;" fill="none" viewBox="0 0 24 24" id="spinner">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -142,12 +153,25 @@ def index():
         'size': 15,
         'page_size': 'letter'
     }
-    return render_template_string(HTML_TEMPLATE, default_params=default_params)
+    
+    # Check if the generator failed to load
+    if generate_word_search_pdf is None:
+        return render_template_string(HTML_TEMPLATE, 
+                                      default_params=default_params,
+                                      generator_missing=True,
+                                      generator_error=globals().get('GENERATOR_IMPORT_ERROR', 'Unknown error'))
+
+    return render_template_string(HTML_TEMPLATE, default_params=default_params, generator_missing=False)
 
 @app.route('/generate', methods=['POST'])
 def generate():
     """Handles form submission, runs the Python script, and serves the PDF."""
     
+    # Critical check: Ensure generator loaded successfully
+    if generate_word_search_pdf is None:
+        error_msg = f"Application initialization failed. Please check 'generator.py' in the logs. Error: {globals().get('GENERATOR_IMPORT_ERROR', 'Unknown load failure.')}"
+        return render_template_string(HTML_TEMPLATE, default_params=request.form.to_dict(), error_message=error_msg), 500
+
     # 1. Parse and Validate Parameters
     try:
         themes = request.form.get('themes', 'random').strip()
