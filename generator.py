@@ -104,6 +104,11 @@ def split_word_list(words):
 
 def draw_wrapped_lines(pdf, text, x, y, font, size, line_h, page_w, page_h, margin_left, margin_right, margin_bottom):
     """Draws text and wraps it within the page boundaries."""
+    # --- FIX: Handle empty/whitespace input to prevent KeyError: 'end' ---
+    if not text or not text.strip():
+        return y 
+    # ---------------------------------------------------------------------
+
     pdf.setFont(font, size)
     words = text.split()
     max_width = page_w - margin_left - margin_right
