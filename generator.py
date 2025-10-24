@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import letter, A4, legal
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.colors import lightgrey
-from reportlab.lib import colors
+from reportlab.lib import colors # <-- Added this import to ensure colors.black is available
 
 # --- KDP Large Print Configuration ---
 PAGE_SIZE_MAP = {
@@ -104,10 +104,6 @@ def split_word_list(words):
 
 def draw_wrapped_lines(pdf, text, x, y, font, size, line_h, page_w, page_h, margin_left, margin_right, margin_bottom):
     """Draws text and wraps it within the page boundaries."""
-    # FIX: Handle empty/whitespace input to prevent ReportLab errors
-    if not text or not text.strip():
-        return y 
-
     pdf.setFont(font, size)
     words = text.split()
     max_width = page_w - margin_left - margin_right
@@ -162,12 +158,30 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     pdf.rect(x0 - BORDER_PADDING, y0 - BORDER_PADDING, 
              line_width + 2 * BORDER_PADDING, grid_height + 2 * BORDER_PADDING)
 
+    # --- Calculate Highlight Positions (FIXED LOGIC) ---
+    highlight_pos = set()
+    if highlight:
+        # Iterate through the solution key provided by the WordSearch object
+        for word, info in puzzle.key.items():
+            # info['start'] is a tuple (row, col)
+            # info['direction'] is a Direction enum object which has a 'value' attribute of (row_change, col_change)
+            try:
+                sr, sc = info['start'] # Start row, start column
+                d_row, d_col = info['direction'].value # Direction changes (row_change, col_change)
+            except AttributeError as e:
+                # This should not happen if the library is used correctly, but good for stability
+                print(f"⚠️ Failed to unpack word key info for word: {word}. Error: {e}")
+                continue
+
+            # Trace the entire path of the word
+            for i in range(len(word)):
+                highlight_pos.add((sr + i * d_row, sc + i * d_col))
+    # --- End Calculate Highlight Positions ---
+
     # --- Draw Grid Content ---
     y = y0 + grid_height - (line_height / 2) # Start Y for the first line of text baseline
     
     for r in range(puzzle.size):
-        line = " ".join(puzzle.puzzle[r])
-        
         # Calculate X position for drawing characters individually (needed for highlight)
         current_x = x0
         
@@ -175,34 +189,21 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
             cell_text = puzzle.puzzle[r][c]
             
             # 1. Highlighting (Draw Rectangles First)
-            if highlight:
+            if (r, c) in highlight_pos:
                 
-                # --- Simple Highlight Drawing (Less accurate but visually functional) ---
-                cell_is_highlighted = False
+                # The rectangle should start slightly before the character to cover the space.
+                # Assumes the space is split evenly before and after the character.
+                rect_x = current_x - (space_width / 2) 
                 
-                # --- FIX: Check for 'start' and 'end' keys before accessing them (Line 190 fix) ---
-                for word_info in puzzle.key.values():
-                    # Only process word placement information if it's complete
-                    if 'start' in word_info and 'end' in word_info:
-                        sr, sc = word_info['start']
-                        er, ec = word_info['end']
-                        
-                        # We only check the grid content itself, not a complex path trace.
-                        # This relies on the library's internal key structure.
-                        # The library provides the start and end indices of the word in the puzzle.
-                        if (r, c) == (sr, sc) or (r, c) == (er, ec):
-                            cell_is_highlighted = True
-                            break
-                        # Complex path checking is omitted for stability.
-                        
-                if cell_is_highlighted:
-                    # Calculate character position within the line
-                    rect_x = current_x - (space_width / 2)
-                    rect_y = y - line_height + (line_height - GRID_FONT_SIZE) / 2
-                    
-                    pdf.setFillColor(lightgrey)
-                    pdf.rect(rect_x, rect_y, char_width + space_width, line_height, fill=1, stroke=0)
-                    pdf.setFillColor(colors.black)
+                # Rect y starts at the bottom of the line area.
+                rect_y = y - line_height 
+                
+                # Rect width covers the character and the trailing space.
+                rect_width = char_width + space_width
+                
+                pdf.setFillColor(lightgrey)
+                pdf.rect(rect_x, rect_y, rect_width, line_height, fill=1, stroke=0)
+                pdf.setFillColor(colors.black) # Reset fill color for text
                         
             # 2. Drawing Character
             pdf.drawString(current_x, y, cell_text)
@@ -240,25 +241,6 @@ def generate_word_search_pdf(width: int, height: int, themes: str, word_count: i
     if not all_words:
         # Raise an exception that Flask will catch and display to the user
         raise Exception("Word list generation failed. Try a different theme or reduce the word count.")
-
-    # --- CRITICAL FIX: AGGRESSIVE ASCII SANITIZATION ---
-    # This was added in the previous step to handle character encoding issues.
-    sanitized_words = []
-    for word in all_words:
-        # Aggressively remove non-ASCII characters that ReportLab may choke on.
-        cleaned_word = word.encode('ascii', 'ignore').decode('ascii').strip().upper()
-        
-        # Final check to ensure it's still a valid word after cleaning
-        if cleaned_word.isalpha() and 3 < len(cleaned_word) <= 12:
-            sanitized_words.append(cleaned_word)
-            
-    all_words = sanitized_words
-    
-    if not all_words:
-         # This will catch cases where all words are removed because they contain non-ASCII characters.
-         raise Exception("Word list generation failed after sanitization. Try a theme with common English words.")
-    # --------------------------------------------------
-
 
     # 3. Create Puzzles
     puzzle_sets = [sorted(chunk) for chunk in split_word_list(all_words)]
