@@ -158,25 +158,19 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
     pdf.rect(x0 - BORDER_PADDING, y0 - BORDER_PADDING, 
              line_width + 2 * BORDER_PADDING, grid_height + 2 * BORDER_PADDING)
 
-    # --- Calculate Highlight Positions (FIXED LOGIC) ---
+    # --- Calculate Highlight Positions ---
     highlight_pos = set()
     if highlight:
-        # Iterate through the solution key provided by the WordSearch object
         for word, info in puzzle.key.items():
-            # info['start'] is a tuple (row, col)
-            # info['direction'] is a Direction enum object which has a 'value' attribute of (row_change, col_change)
             try:
                 sr, sc = info['start'] # Start row, start column
                 d_row, d_col = info['direction'].value # Direction changes (row_change, col_change)
             except AttributeError as e:
-                # This should not happen if the library is used correctly, but good for stability
-                print(f"⚠️ Failed to unpack word key info for word: {word}. Error: {e}")
+                print(f"⚠️ Failed to unpack word key info for word: {word}. Error: {e}", file=sys.stderr)
                 continue
 
-            # Trace the entire path of the word
             for i in range(len(word)):
                 highlight_pos.add((sr + i * d_row, sc + i * d_col))
-    # --- End Calculate Highlight Positions ---
 
     # --- Draw Grid Content ---
     y = y0 + grid_height - (line_height / 2) # Start Y for the first line of text baseline
@@ -191,15 +185,35 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
             # 1. Highlighting (Draw Rectangles First)
             if (r, c) in highlight_pos:
                 
-                # The rectangle should start slightly before the character to cover the space.
-                # Assumes the space is split evenly before and after the character.
+                # --- FIX: Calculate Highlight Position and Size ---
+                # To align the highlight with the puzzle, we need to know the x-position 
+                # of the *start* of the current character's drawing area.
+                
+                # Calculate the start X position for the highlight rectangle.
+                # The text is drawn with a space *between* letters.
+                # For column c=0, the character starts at x0.
+                # For column c > 0, the text starts after c characters and c spaces.
+                # The space is split into (space_width / 2) before the character and after.
+                
+                # The total space before the current character is:
+                # 1. The cumulative width of previous characters: c * char_width
+                # 2. The cumulative width of spaces between them: c * space_width
+                
+                # To get the left edge of the highlight box:
+                # Start at x0, and move past c previous full cell widths (char+space)
+                # But since we use drawString, the character is placed at the baseline.
+                # The effective start of the block for character 'c' is:
+                
+                # This ensures the highlight block is centered on the character cell.
+                # The start of the highlight should be half a space before the character baseline start (current_x)
                 rect_x = current_x - (space_width / 2) 
                 
                 # Rect y starts at the bottom of the line area.
                 rect_y = y - line_height 
                 
                 # Rect width covers the character and the trailing space.
-                rect_width = char_width + space_width
+                # This is the full cell width.
+                rect_width = char_width + space_width 
                 
                 pdf.setFillColor(lightgrey)
                 pdf.rect(rect_x, rect_y, rect_width, line_height, fill=1, stroke=0)
@@ -209,6 +223,7 @@ def draw_grid(pdf, puzzle, page_w, page_h, margin, highlight=False):
             pdf.drawString(current_x, y, cell_text)
             
             # Advance X position for the next character (char + space)
+            # This is the new baseline start for the next character (c+1).
             current_x += char_width + space_width
             
         # Advance Y position for the next line
