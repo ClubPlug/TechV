@@ -104,10 +104,9 @@ def split_word_list(words):
 
 def draw_wrapped_lines(pdf, text, x, y, font, size, line_h, page_w, page_h, margin_left, margin_right, margin_bottom):
     """Draws text and wraps it within the page boundaries."""
-    # --- FIX: Handle empty/whitespace input to prevent KeyError: 'end' ---
+    # This check (from previous step) prevents errors on empty strings
     if not text or not text.strip():
         return y 
-    # ---------------------------------------------------------------------
 
     pdf.setFont(font, size)
     words = text.split()
@@ -242,6 +241,25 @@ def generate_word_search_pdf(width: int, height: int, themes: str, word_count: i
     if not all_words:
         # Raise an exception that Flask will catch and display to the user
         raise Exception("Word list generation failed. Try a different theme or reduce the word count.")
+
+    # --- CRITICAL FIX: AGGRESSIVE ASCII SANITIZATION ---
+    sanitized_words = []
+    for word in all_words:
+        # Aggressively remove non-ASCII characters that ReportLab may choke on.
+        # This converts Unicode characters to the closest ASCII equivalent or removes them.
+        cleaned_word = word.encode('ascii', 'ignore').decode('ascii').strip().upper()
+        
+        # Final check to ensure it's still a valid word after cleaning
+        if cleaned_word.isalpha() and 3 < len(cleaned_word) <= 12:
+            sanitized_words.append(cleaned_word)
+            
+    all_words = sanitized_words
+    
+    if not all_words:
+         # This will catch cases where all words are removed because they contain non-ASCII characters.
+         raise Exception("Word list generation failed after sanitization. Try a theme with common English words.")
+    # --------------------------------------------------
+
 
     # 3. Create Puzzles
     puzzle_sets = [sorted(chunk) for chunk in split_word_list(all_words)]
